@@ -20,5 +20,5 @@ COPY --from=build /app/package.json /app/pnpm-workspace.yaml ./
 COPY --from=build /app/node_modules node_modules
 COPY --from=build /app/apps/server apps/server
 COPY --from=build /app/apps/web/dist apps/web/dist
-EXPOSE 3000
+EXPOSE 3100
 CMD ["corepack", "pnpm", "--filter", "@server-panel/server", "start"]

@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 
 DOMAIN="${DOMAIN:-${1:-}}"
-APP_PORT="${APP_PORT:-3000}"
+APP_PORT="${APP_PORT:-3100}"
 ENABLE_CERTBOT="${ENABLE_CERTBOT:-0}"
 
 die() {

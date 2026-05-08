@@ -73,7 +73,7 @@ ensure_env() {
 
   log "生成生产环境 .env"
   cat > "${ENV_FILE}" <<EOF
-APP_PORT=${APP_PORT:-3000}
+APP_PORT=${APP_PORT:-3100}
 COMPOSE_PROJECT_NAME=server-panel
 POSTGRES_USER=panel
 POSTGRES_PASSWORD=$(rand_hex 24)

@@ -44,7 +44,7 @@ pnpm seed
 pnpm dev
 ```
 
-前端默认在 `http://localhost:5173`，后端默认在 `http://localhost:3000`。
+前端默认在 `http://localhost:5173`，后端默认在 `http://localhost:3100`。
 
 默认管理员由 seed 创建：
 
@@ -73,7 +73,7 @@ sudo bash scripts/deploy.sh
 部署完成后访问：
 
 ```text
-http://<服务器IP>:3000
+http://<服务器IP>:3100
 ```
 
 管理员账号和密码在服务器的 `.env` 文件中：
@@ -90,7 +90,7 @@ grep 'ADMIN_' .env
 sudo DOMAIN=panel.example.com bash scripts/setup-nginx.sh
 ```
 
-把 `panel.example.com` 换成你的域名。脚本会安装 Nginx，反向代理到本机 `127.0.0.1:3000`，并配置 WebSocket 转发，保证 Web SSH 可用。
+把 `panel.example.com` 换成你的域名。脚本会安装 Nginx，反向代理到本机 `127.0.0.1:3100`，并配置 WebSocket 转发，保证 Web SSH 可用。
 
 需要自动申请 HTTPS 证书时执行：
 
