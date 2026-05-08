@@ -47,3 +47,52 @@ export async function testSshConnection(
       .connect(buildConnectConfig(server, credential));
   });
 }
+
+export async function execSshCommand(
+  server: { host: string; port: number; username: string },
+  credential: SshCredential,
+  command: string,
+) {
+  const conn = new Client();
+  return new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      conn.destroy();
+      reject(new Error('SSH 命令执行超时'));
+    }, env.SSH_CONNECT_TIMEOUT_MS + 10000);
+
+    conn
+      .on('ready', () => {
+        conn.exec(command, (error, stream) => {
+          if (error) {
+            clearTimeout(timer);
+            conn.end();
+            reject(error);
+            return;
+          }
+          let stdout = '';
+          let stderr = '';
+          stream
+            .on('close', (code: number) => {
+              clearTimeout(timer);
+              conn.end();
+              if (code && code !== 0) {
+                reject(new Error(stderr.trim() || `命令退出码 ${code}`));
+                return;
+              }
+              resolve({ stdout, stderr });
+            })
+            .on('data', (chunk: Buffer) => {
+              stdout += chunk.toString('utf8');
+            })
+            .stderr.on('data', (chunk: Buffer) => {
+              stderr += chunk.toString('utf8');
+            });
+        });
+      })
+      .on('error', (error) => {
+        clearTimeout(timer);
+        reject(error);
+      })
+      .connect(buildConnectConfig(server, credential));
+  });
+}

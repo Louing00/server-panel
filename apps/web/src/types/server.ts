@@ -31,3 +31,30 @@ export type ServerInput = {
   tags: string[];
   description?: string | null;
 };
+
+export type ServerMetrics = {
+  hostname: string;
+  collectedAt: string;
+  cpu: {
+    usagePercent: number;
+  };
+  memory: {
+    totalBytes: number;
+    usedBytes: number;
+    availableBytes: number;
+    usagePercent: number;
+  };
+  disk: {
+    mount: string;
+    totalBytes: number;
+    usedBytes: number;
+    availableBytes: number;
+    usagePercent: number;
+  };
+  network: {
+    rxBytes: number;
+    txBytes: number;
+    totalBytes: number;
+  };
+  uptimeSeconds: number;
+};

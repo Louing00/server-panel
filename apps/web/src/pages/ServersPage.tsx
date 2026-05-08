@@ -1,10 +1,27 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Button, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Table, Tag, Tooltip, Typography, message } from 'antd';
-import { FolderOpen, PlugZap, Plus, RefreshCw, TerminalSquare, Trash2 } from 'lucide-react';
+import {
+  Button,
+  Alert,
+  Descriptions,
+  Form,
+  Input,
+  InputNumber,
+  Modal,
+  Popconfirm,
+  Progress,
+  Select,
+  Space,
+  Table,
+  Tag,
+  Tooltip,
+  Typography,
+  message,
+} from 'antd';
+import { BarChart3, FolderOpen, PlugZap, Plus, RefreshCw, TerminalSquare, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { createServer, deleteServer, listServers, refreshServerStatus, testServer, updateServer } from '../api/servers';
-import type { Server, ServerInput } from '../types/server';
+import { createServer, deleteServer, getServerMetrics, listServers, refreshServerStatus, testServer, updateServer } from '../api/servers';
+import type { Server, ServerInput, ServerMetrics } from '../types/server';
 
 function toTags(value?: string) {
   return value
@@ -119,11 +136,103 @@ function ServerModal({
   );
 }
 
+function formatBytes(value: number) {
+  if (!Number.isFinite(value) || value <= 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
+  let size = value;
+  let index = 0;
+  while (size >= 1024 && index < units.length - 1) {
+    size /= 1024;
+    index += 1;
+  }
+  return `${size >= 10 || index === 0 ? size.toFixed(0) : size.toFixed(1)} ${units[index]}`;
+}
+
+function formatUptime(seconds: number) {
+  const days = Math.floor(seconds / 86400);
+  const hours = Math.floor((seconds % 86400) / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  return `${days} 天 ${hours} 小时 ${minutes} 分钟`;
+}
+
+function MetricProgress({ label, percent }: { label: string; percent: number }) {
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <Typography.Text>{label}</Typography.Text>
+      <Progress
+        percent={Math.round(percent * 10) / 10}
+        status={percent >= 90 ? 'exception' : percent >= 75 ? 'active' : 'normal'}
+      />
+    </div>
+  );
+}
+
+function ServerMetricsModal({
+  server,
+  metrics,
+  loading,
+  error,
+  onCancel,
+}: {
+  server?: Server | null;
+  metrics?: ServerMetrics;
+  loading: boolean;
+  error?: unknown;
+  onCancel: () => void;
+}) {
+  return (
+    <Modal
+      title={server ? `${server.name} · 服务器详情` : '服务器详情'}
+      open={Boolean(server)}
+      onCancel={onCancel}
+      footer={null}
+      width={760}
+    >
+      {error ? (
+        <Alert
+          type="error"
+          showIcon
+          message="服务器详情获取失败"
+          description={error instanceof Error ? error.message : '请检查 SSH 凭据和目标服务器状态'}
+        />
+      ) : loading || !metrics ? (
+        <Typography.Text type="secondary">正在采集服务器指标...</Typography.Text>
+      ) : (
+        <>
+          <Descriptions column={2} size="small" style={{ marginBottom: 18 }}>
+            <Descriptions.Item label="主机名">{metrics.hostname || '-'}</Descriptions.Item>
+            <Descriptions.Item label="挂载点">{metrics.disk.mount}</Descriptions.Item>
+            <Descriptions.Item label="运行时长">{formatUptime(metrics.uptimeSeconds)}</Descriptions.Item>
+            <Descriptions.Item label="采集时间">
+              {new Date(metrics.collectedAt).toLocaleString()}
+            </Descriptions.Item>
+          </Descriptions>
+          <MetricProgress label="CPU 占用" percent={metrics.cpu.usagePercent} />
+          <MetricProgress label="内存占用" percent={metrics.memory.usagePercent} />
+          <Typography.Text type="secondary">
+            {formatBytes(metrics.memory.usedBytes)} / {formatBytes(metrics.memory.totalBytes)}
+          </Typography.Text>
+          <MetricProgress label="硬盘占用" percent={metrics.disk.usagePercent} />
+          <Typography.Text type="secondary">
+            {formatBytes(metrics.disk.usedBytes)} / {formatBytes(metrics.disk.totalBytes)}
+          </Typography.Text>
+          <Descriptions column={3} size="small" style={{ marginTop: 18 }}>
+            <Descriptions.Item label="入站流量">{formatBytes(metrics.network.rxBytes)}</Descriptions.Item>
+            <Descriptions.Item label="出站流量">{formatBytes(metrics.network.txBytes)}</Descriptions.Item>
+            <Descriptions.Item label="总流量">{formatBytes(metrics.network.totalBytes)}</Descriptions.Item>
+          </Descriptions>
+        </>
+      )}
+    </Modal>
+  );
+}
+
 export default function ServersPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [keyword, setKeyword] = useState('');
   const [editing, setEditing] = useState<Server | null>();
+  const [metricsServer, setMetricsServer] = useState<Server | null>(null);
   const servers = useQuery({ queryKey: ['servers', keyword], queryFn: () => listServers(keyword) });
 
   const saveMutation = useMutation({
@@ -149,6 +258,13 @@ export default function ServersPage() {
       await queryClient.invalidateQueries({ queryKey: ['servers'] });
     },
     onError: (error) => message.error(error instanceof Error ? error.message : '状态刷新失败'),
+  });
+
+  const metricsQuery = useQuery({
+    queryKey: ['server-metrics', metricsServer?.id],
+    queryFn: () => getServerMetrics(metricsServer!.id),
+    enabled: Boolean(metricsServer?.id),
+    retry: false,
   });
 
   return (
@@ -212,6 +328,14 @@ export default function ServersPage() {
                     onClick={() => navigate(`/files?serverId=${row.id}`)}
                   />
                 </Tooltip>
+                <Tooltip title="服务器详情">
+                  <Button
+                    icon={<BarChart3 size={16} />}
+                    onClick={() => {
+                      setMetricsServer(row);
+                    }}
+                  />
+                </Tooltip>
                 <Popconfirm
                   title="删除服务器"
                   description="删除后无法恢复，凭据关联也会失效。"
@@ -236,6 +360,13 @@ export default function ServersPage() {
         onSubmit={async (values) => {
           await saveMutation.mutateAsync(values);
         }}
+      />
+      <ServerMetricsModal
+        server={metricsServer}
+        metrics={metricsQuery.data}
+        loading={metricsQuery.isFetching}
+        error={metricsQuery.error}
+        onCancel={() => setMetricsServer(null)}
       />
     </>
   );

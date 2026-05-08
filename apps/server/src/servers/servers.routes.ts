@@ -5,7 +5,7 @@ import { authenticate, requireAdmin } from '../common/auth.js';
 import { HttpError } from '../common/errors.js';
 import { prisma } from '../common/prisma.js';
 import { createCredential, decryptCredential, updateCredential } from '../credentials/credentials.service.js';
-import { testSshConnection } from '../ssh/ssh.service.js';
+import { execSshCommand, testSshConnection } from '../ssh/ssh.service.js';
 
 const credentialSchema = z
   .object({
@@ -38,6 +38,102 @@ const listSchema = z.object({
 function publicServer<T extends { credentialId?: string | null; credential?: unknown }>(server: T) {
   const { credential, ...rest } = server;
   return { ...rest, hasCredential: Boolean(rest.credentialId) };
+}
+
+function section(output: string, name: string) {
+  const start = output.indexOf(`__${name}__`);
+  if (start < 0) return '';
+  const next = output.indexOf('__', start + name.length + 4);
+  return output
+    .slice(start + name.length + 4, next < 0 ? undefined : next)
+    .trim();
+}
+
+function parseCpu(line: string) {
+  const values = line
+    .trim()
+    .split(/\s+/)
+    .slice(1)
+    .map((item) => Number(item));
+  const idle = (values[3] || 0) + (values[4] || 0);
+  const total = values.reduce((sum, value) => sum + value, 0);
+  return { idle, total };
+}
+
+function percent(used: number, total: number) {
+  if (!Number.isFinite(used) || !Number.isFinite(total) || total <= 0) return 0;
+  return Math.round((used / total) * 1000) / 10;
+}
+
+function parseServerMetrics(output: string) {
+  const cpu1 = parseCpu(section(output, 'CPU1').split('\n')[0] || '');
+  const cpu2 = parseCpu(section(output, 'CPU2').split('\n')[0] || '');
+  const cpuTotalDiff = cpu2.total - cpu1.total;
+  const cpuIdleDiff = cpu2.idle - cpu1.idle;
+  const meminfo = Object.fromEntries(
+    section(output, 'MEM')
+      .split('\n')
+      .map((line) => {
+        const match = line.match(/^(\w+):\s+(\d+)/);
+        return match ? [match[1], Number(match[2]) * 1024] : null;
+      })
+      .filter((item): item is [string, number] => Boolean(item)),
+  );
+  const memoryTotal = meminfo.MemTotal || 0;
+  const memoryAvailable = meminfo.MemAvailable || 0;
+  const memoryUsed = Math.max(memoryTotal - memoryAvailable, 0);
+
+  const diskLines = section(output, 'DISK').split('\n');
+  const diskParts = (diskLines[1] || '').trim().split(/\s+/);
+  const diskTotal = Number(diskParts[1] || 0);
+  const diskUsed = Number(diskParts[2] || 0);
+  const diskAvailable = Number(diskParts[3] || 0);
+
+  const network = section(output, 'NET')
+    .split('\n')
+    .slice(2)
+    .reduce(
+      (acc, line) => {
+        const [rawName, rawStats] = line.trim().split(':');
+        if (!rawName || !rawStats || rawName.trim() === 'lo') return acc;
+        const stats = rawStats.trim().split(/\s+/).map(Number);
+        return {
+          rxBytes: acc.rxBytes + (stats[0] || 0),
+          txBytes: acc.txBytes + (stats[8] || 0),
+        };
+      },
+      { rxBytes: 0, txBytes: 0 },
+    );
+
+  const uptimeSeconds = Number(section(output, 'UPTIME').split(/\s+/)[0] || 0);
+  const hostname = section(output, 'HOSTNAME').split('\n')[0] || '';
+
+  return {
+    hostname,
+    collectedAt: new Date().toISOString(),
+    cpu: {
+      usagePercent: percent(cpuTotalDiff - cpuIdleDiff, cpuTotalDiff),
+    },
+    memory: {
+      totalBytes: memoryTotal,
+      usedBytes: memoryUsed,
+      availableBytes: memoryAvailable,
+      usagePercent: percent(memoryUsed, memoryTotal),
+    },
+    disk: {
+      mount: '/',
+      totalBytes: diskTotal,
+      usedBytes: diskUsed,
+      availableBytes: diskAvailable,
+      usagePercent: percent(diskUsed, diskTotal),
+    },
+    network: {
+      rxBytes: network.rxBytes,
+      txBytes: network.txBytes,
+      totalBytes: network.rxBytes + network.txBytes,
+    },
+    uptimeSeconds: Number.isFinite(uptimeSeconds) ? uptimeSeconds : 0,
+  };
 }
 
 async function testAndUpdateServer(serverId: string, request?: Parameters<typeof writeAudit>[0]['request']) {
@@ -194,6 +290,56 @@ export async function serverRoutes(app: FastifyInstance) {
     const result = await testAndUpdateServer(params.id, request);
     if (!result.success) return reply.status(400).send(result);
     return result;
+  });
+
+  app.get('/servers/:id/metrics', { preHandler: authenticate }, async (request) => {
+    const params = z.object({ id: z.string().uuid() }).parse(request.params);
+    const server = await prisma.server.findUnique({
+      where: { id: params.id },
+      include: { credential: true },
+    });
+    if (!server) throw new HttpError(404, '服务器不存在');
+
+    const command = [
+      'printf "__CPU1__\\n"',
+      'head -n1 /proc/stat',
+      'sleep 1',
+      'printf "__CPU2__\\n"',
+      'head -n1 /proc/stat',
+      'printf "__MEM__\\n"',
+      'cat /proc/meminfo',
+      'printf "__DISK__\\n"',
+      'df -B1 -P /',
+      'printf "__NET__\\n"',
+      'cat /proc/net/dev',
+      'printf "__UPTIME__\\n"',
+      'cat /proc/uptime',
+      'printf "__HOSTNAME__\\n"',
+      'hostname',
+    ].join(' && ');
+
+    try {
+      const { stdout } = await execSshCommand(server, decryptCredential(server.credential), command);
+      const metrics = parseServerMetrics(stdout);
+      await prisma.server.update({
+        where: { id: server.id },
+        data: { status: 'online', lastSuccessAt: new Date(), lastFailureReason: null },
+      });
+      await writeAudit({
+        action: 'server.metrics_view',
+        resourceType: 'server',
+        resourceId: server.id,
+        request,
+      });
+      return metrics;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '服务器详情获取失败';
+      await prisma.server.update({
+        where: { id: server.id },
+        data: { status: 'offline', lastFailureAt: new Date(), lastFailureReason: message },
+      });
+      throw new HttpError(400, message);
+    }
   });
 
   app.post('/servers/status/refresh', { preHandler: authenticate }, async (request) => {

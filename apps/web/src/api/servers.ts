@@ -1,4 +1,4 @@
-import type { Server, ServerInput } from '../types/server';
+import type { Server, ServerInput, ServerMetrics } from '../types/server';
 import { request } from './http';
 
 export function listServers(keyword?: string) {
@@ -23,6 +23,10 @@ export function testServer(id: string) {
   return request<{ success: true; latencyMs: number; server: Server }>(`/servers/${id}/test`, {
     method: 'POST',
   });
+}
+
+export function getServerMetrics(id: string) {
+  return request<ServerMetrics>(`/servers/${id}/metrics`);
 }
 
 export function refreshServerStatus(ids?: string[]) {
