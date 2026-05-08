@@ -13,7 +13,7 @@ export default function LoginPage() {
   return (
     <main className="login-page">
       <section className="login-box">
-        <Typography.Title level={3}>境外服务器统一管控平台</Typography.Title>
+        <Typography.Title level={3}>云枢控制台</Typography.Title>
         <Form
           layout="vertical"
           initialValues={{ username: 'admin' }}

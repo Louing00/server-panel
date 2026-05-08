@@ -33,9 +33,9 @@ function Shell() {
     <Layout className="app-shell">
       <Layout.Sider width={244} className="sidebar">
         <div className="brand">
-          <div className="brand-mark">SP</div>
+          <div className="brand-mark">YS</div>
           <div>
-            <Typography.Text strong>境外服务器统一管控平台</Typography.Text>
+            <Typography.Text strong>云枢控制台</Typography.Text>
             <Typography.Text type="secondary">Web SSH / SFTP</Typography.Text>
           </div>
         </div>
