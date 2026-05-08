@@ -1,4 +1,4 @@
-import { Button, Popconfirm, Space, Table, Tag } from 'antd';
+import { Button, Popconfirm, Space, Table, Tag, Tooltip } from 'antd';
 import dayjs from 'dayjs';
 import { Download, Folder, File as FileIcon, Trash2 } from 'lucide-react';
 import type { RemoteFile } from '../../types/file';
@@ -48,9 +48,15 @@ export default function FileTable({
           render: (_, row) => (
             <Space>
               <Button onClick={() => onRename(row)}>重命名</Button>
-              {row.type === 'file' && <Button icon={<Download size={16} />} onClick={() => onDownload(row)} />}
+              {row.type === 'file' && (
+                <Tooltip title="下载">
+                  <Button icon={<Download size={16} />} onClick={() => onDownload(row)} />
+                </Tooltip>
+              )}
               <Popconfirm title="删除文件" description={row.path} onConfirm={() => onDelete(row)}>
-                <Button danger icon={<Trash2 size={16} />} />
+                <Tooltip title="删除">
+                  <Button danger icon={<Trash2 size={16} />} />
+                </Tooltip>
               </Popconfirm>
             </Space>
           ),

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { Terminal } from '@xterm/xterm';
-import { Button, Space, Tag } from 'antd';
+import { Button, Space, Tag, Tooltip } from 'antd';
 import { RotateCcw, Trash2 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 
@@ -90,8 +90,12 @@ export default function TerminalView({ serverId }: { serverId: string }) {
           {status}
         </Tag>
         <Space>
-          <Button icon={<RotateCcw size={16} />} onClick={connect} />
-          <Button icon={<Trash2 size={16} />} onClick={() => terminalRef.current?.clear()} />
+          <Tooltip title="重连">
+            <Button icon={<RotateCcw size={16} />} onClick={connect} />
+          </Tooltip>
+          <Tooltip title="清屏">
+            <Button icon={<Trash2 size={16} />} onClick={() => terminalRef.current?.clear()} />
+          </Tooltip>
         </Space>
       </div>
       <div className="terminal-wrap">

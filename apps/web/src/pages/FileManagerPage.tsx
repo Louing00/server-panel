@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Button, Input, Modal, Typography, Upload, message } from 'antd';
+import { Button, Input, Modal, Tooltip, Typography, Upload, message } from 'antd';
 import { FolderPlus, RefreshCw, UploadCloud } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { deleteFile, downloadFile, listFiles, mkdir, rename, uploadFile } from '../api/files';
@@ -78,24 +78,28 @@ export default function FileManagerPage() {
               <div className="toolbar" style={{ padding: 12 }}>
                 <Typography.Text strong>{selectedName}</Typography.Text>
                 <Button onClick={() => setPath(parentPath(currentPath))}>上级</Button>
-                <Button icon={<RefreshCw size={16} />} onClick={refresh} />
-                <Button
-                  icon={<FolderPlus size={16} />}
-                  onClick={() => {
-                    Modal.confirm({
-                      title: '新建文件夹',
-                      content: <Input id="mkdir-name" placeholder="folder-name" />,
-                      onOk: async () => {
-                        const input = document.getElementById('mkdir-name') as HTMLInputElement | null;
-                        if (input?.value) {
-                          await mutate.mutateAsync(() =>
-                            mkdir(activeServerId, `${currentPath}/${input.value}`),
-                          );
-                        }
-                      },
-                    });
-                  }}
-                />
+                <Tooltip title="刷新目录">
+                  <Button icon={<RefreshCw size={16} />} onClick={refresh} />
+                </Tooltip>
+                <Tooltip title="新建文件夹">
+                  <Button
+                    icon={<FolderPlus size={16} />}
+                    onClick={() => {
+                      Modal.confirm({
+                        title: '新建文件夹',
+                        content: <Input id="mkdir-name" placeholder="folder-name" />,
+                        onOk: async () => {
+                          const input = document.getElementById('mkdir-name') as HTMLInputElement | null;
+                          if (input?.value) {
+                            await mutate.mutateAsync(() =>
+                              mkdir(activeServerId, `${currentPath}/${input.value}`),
+                            );
+                          }
+                        },
+                      });
+                    }}
+                  />
+                </Tooltip>
                 <Upload
                   showUploadList={false}
                   beforeUpload={async (file) => {

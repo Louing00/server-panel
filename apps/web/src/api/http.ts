@@ -5,7 +5,7 @@ const API_BASE = '/api';
 export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const { accessToken, clear } = useAuthStore.getState();
   const headers = new Headers(init.headers);
-  if (!(init.body instanceof FormData)) headers.set('content-type', 'application/json');
+  if (init.body && !(init.body instanceof FormData)) headers.set('content-type', 'application/json');
   if (accessToken) headers.set('authorization', `Bearer ${accessToken}`);
   const response = await fetch(`${API_BASE}${path}`, { ...init, headers });
   if (response.status === 401) {

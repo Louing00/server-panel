@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Button, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Table, Tag, Typography, message } from 'antd';
+import { Button, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Table, Tag, Tooltip, Typography, message } from 'antd';
 import { FolderOpen, PlugZap, Plus, RefreshCw, TerminalSquare, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { createServer, deleteServer, listServers, refreshServerStatus, testServer, updateServer } from '../api/servers';
@@ -197,9 +197,21 @@ export default function ServersPage() {
             title: '操作',
             render: (_, row) => (
               <Space>
-                <Button icon={<PlugZap size={16} />} onClick={() => testMutation.mutate(row.id)} />
-                <Button icon={<TerminalSquare size={16} />} onClick={() => navigate(`/terminal?serverId=${row.id}`)} />
-                <Button icon={<FolderOpen size={16} />} onClick={() => navigate(`/files?serverId=${row.id}`)} />
+                <Tooltip title="测试连接">
+                  <Button icon={<PlugZap size={16} />} onClick={() => testMutation.mutate(row.id)} />
+                </Tooltip>
+                <Tooltip title="打开终端">
+                  <Button
+                    icon={<TerminalSquare size={16} />}
+                    onClick={() => navigate(`/terminal?serverId=${row.id}`)}
+                  />
+                </Tooltip>
+                <Tooltip title="文件管理">
+                  <Button
+                    icon={<FolderOpen size={16} />}
+                    onClick={() => navigate(`/files?serverId=${row.id}`)}
+                  />
+                </Tooltip>
                 <Popconfirm
                   title="删除服务器"
                   description="删除后无法恢复，凭据关联也会失效。"
@@ -208,7 +220,9 @@ export default function ServersPage() {
                     await queryClient.invalidateQueries({ queryKey: ['servers'] });
                   }}
                 >
-                  <Button danger icon={<Trash2 size={16} />} />
+                  <Tooltip title="删除服务器">
+                    <Button danger icon={<Trash2 size={16} />} />
+                  </Tooltip>
                 </Popconfirm>
               </Space>
             ),

@@ -1,4 +1,4 @@
-import { Breadcrumb, Button } from 'antd';
+import { Breadcrumb, Button, Tooltip } from 'antd';
 import { Home } from 'lucide-react';
 
 export default function PathBreadcrumb({
@@ -11,7 +11,9 @@ export default function PathBreadcrumb({
   const parts = path.split('/').filter(Boolean);
   return (
     <div className="file-path">
-      <Button icon={<Home size={16} />} onClick={() => onChange('.')} />
+      <Tooltip title="返回 Home">
+        <Button icon={<Home size={16} />} onClick={() => onChange('.')} />
+      </Tooltip>
       <Breadcrumb
         items={[
           { title: <a onClick={() => onChange('/')}>/</a> },
