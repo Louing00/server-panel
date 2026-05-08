@@ -20,5 +20,22 @@ export function deleteServer(id: string) {
 }
 
 export function testServer(id: string) {
-  return request<{ latencyMs: number }>(`/servers/${id}/test`, { method: 'POST' });
+  return request<{ success: true; latencyMs: number; server: Server }>(`/servers/${id}/test`, {
+    method: 'POST',
+  });
+}
+
+export function refreshServerStatus(ids?: string[]) {
+  return request<{
+    items: Array<
+      | { success: true; latencyMs: number; server: Server }
+      | { success: false; message: string; server: Server }
+    >;
+    total: number;
+    online: number;
+    offline: number;
+  }>('/servers/status/refresh', {
+    method: 'POST',
+    body: JSON.stringify({ ids }),
+  });
 }

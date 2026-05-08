@@ -40,6 +40,44 @@ function publicServer<T extends { credentialId?: string | null; credential?: unk
   return { ...rest, hasCredential: Boolean(rest.credentialId) };
 }
 
+async function testAndUpdateServer(serverId: string, request?: Parameters<typeof writeAudit>[0]['request']) {
+  const server = await prisma.server.findUnique({
+    where: { id: serverId },
+    include: { credential: true },
+  });
+  if (!server) throw new HttpError(404, '服务器不存在');
+
+  try {
+    const result = await testSshConnection(server, decryptCredential(server.credential));
+    const updated = await prisma.server.update({
+      where: { id: server.id },
+      data: { status: 'online', lastSuccessAt: new Date(), lastFailureReason: null },
+    });
+    await writeAudit({
+      action: 'server.test_success',
+      resourceType: 'server',
+      resourceId: server.id,
+      request,
+      detail: result,
+    });
+    return { server: publicServer(updated), success: true, latencyMs: result.latencyMs };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '连接失败';
+    const updated = await prisma.server.update({
+      where: { id: server.id },
+      data: { status: 'offline', lastFailureAt: new Date(), lastFailureReason: message },
+    });
+    await writeAudit({
+      action: 'server.test_failed',
+      resourceType: 'server',
+      resourceId: server.id,
+      request,
+      detail: { message },
+    });
+    return { server: publicServer(updated), success: false, message };
+  }
+}
+
 export async function serverRoutes(app: FastifyInstance) {
   app.get('/servers', { preHandler: authenticate }, async (request) => {
     const query = listSchema.parse(request.query);
@@ -153,39 +191,27 @@ export async function serverRoutes(app: FastifyInstance) {
 
   app.post('/servers/:id/test', { preHandler: authenticate }, async (request, reply) => {
     const params = z.object({ id: z.string().uuid() }).parse(request.params);
-    const server = await prisma.server.findUnique({
-      where: { id: params.id },
-      include: { credential: true },
+    const result = await testAndUpdateServer(params.id, request);
+    if (!result.success) return reply.status(400).send(result);
+    return result;
+  });
+
+  app.post('/servers/status/refresh', { preHandler: authenticate }, async (request) => {
+    const body = z.object({ ids: z.array(z.string().uuid()).optional() }).parse(request.body ?? {});
+    const servers = await prisma.server.findMany({
+      where: body.ids?.length ? { id: { in: body.ids } } : undefined,
+      select: { id: true },
+      orderBy: { updatedAt: 'desc' },
     });
-    if (!server) throw new HttpError(404, '服务器不存在');
-    try {
-      const result = await testSshConnection(server, decryptCredential(server.credential));
-      await prisma.server.update({
-        where: { id: server.id },
-        data: { status: 'online', lastSuccessAt: new Date(), lastFailureReason: null },
-      });
-      await writeAudit({
-        action: 'server.test_success',
-        resourceType: 'server',
-        resourceId: server.id,
-        request,
-        detail: result,
-      });
-      return result;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : '连接失败';
-      await prisma.server.update({
-        where: { id: server.id },
-        data: { status: 'offline', lastFailureAt: new Date(), lastFailureReason: message },
-      });
-      await writeAudit({
-        action: 'server.test_failed',
-        resourceType: 'server',
-        resourceId: server.id,
-        request,
-        detail: { message },
-      });
-      return reply.status(400).send({ success: false, message });
+    const results = [];
+    for (const server of servers) {
+      results.push(await testAndUpdateServer(server.id, request));
     }
+    return {
+      items: results,
+      total: results.length,
+      online: results.filter((item) => item.success).length,
+      offline: results.filter((item) => !item.success).length,
+    };
   });
 }

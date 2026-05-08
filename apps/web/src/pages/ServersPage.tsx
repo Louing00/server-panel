@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Table, Tag, Typography, message } from 'antd';
-import { FolderOpen, PlugZap, Plus, TerminalSquare, Trash2 } from 'lucide-react';
+import { FolderOpen, PlugZap, Plus, RefreshCw, TerminalSquare, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { createServer, deleteServer, listServers, testServer, updateServer } from '../api/servers';
+import { createServer, deleteServer, listServers, refreshServerStatus, testServer, updateServer } from '../api/servers';
 import type { Server, ServerInput } from '../types/server';
 
 function toTags(value?: string) {
@@ -142,6 +142,15 @@ export default function ServersPage() {
     onSettled: () => queryClient.invalidateQueries({ queryKey: ['servers'] }),
   });
 
+  const refreshStatusMutation = useMutation({
+    mutationFn: () => refreshServerStatus((servers.data?.items ?? []).map((server) => server.id)),
+    onSuccess: async (data) => {
+      message.success(`状态刷新完成：在线 ${data.online}，离线 ${data.offline}`);
+      await queryClient.invalidateQueries({ queryKey: ['servers'] });
+    },
+    onError: (error) => message.error(error instanceof Error ? error.message : '状态刷新失败'),
+  });
+
   return (
     <>
       <div className="page-title">
@@ -152,6 +161,14 @@ export default function ServersPage() {
       </div>
       <div className="toolbar">
         <Input.Search placeholder="搜索名称、主机、用户" allowClear onSearch={setKeyword} style={{ maxWidth: 360 }} />
+        <Button
+          icon={<RefreshCw size={16} />}
+          loading={refreshStatusMutation.isPending}
+          onClick={() => refreshStatusMutation.mutate()}
+          disabled={!servers.data?.items.length}
+        >
+          刷新状态
+        </Button>
       </div>
       <Table
         rowKey="id"

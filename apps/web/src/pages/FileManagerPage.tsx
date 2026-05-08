@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button, Input, Modal, Typography, Upload, message } from 'antd';
 import { FolderPlus, RefreshCw, UploadCloud } from 'lucide-react';
@@ -16,12 +16,13 @@ function parentPath(current: string) {
 }
 
 export default function FileManagerPage() {
-  const [search] = useSearchParams();
+  const [search, setSearch] = useSearchParams();
   const queryClient = useQueryClient();
   const servers = useQuery({ queryKey: ['servers'], queryFn: () => listServers() });
-  const [serverId, setServerId] = useState(search.get('serverId') ?? '');
+  const serverIdParam = search.get('serverId') ?? '';
+  const [serverId, setServerId] = useState(serverIdParam);
   const [path, setPath] = useState('.');
-  const activeServerId = serverId || servers.data?.items[0]?.id || '';
+  const activeServerId = serverId;
   const files = useQuery({
     queryKey: ['files', activeServerId, path],
     queryFn: () => listFiles(activeServerId, path),
@@ -44,6 +45,11 @@ export default function FileManagerPage() {
     [activeServerId, servers.data?.items],
   );
 
+  useEffect(() => {
+    setServerId(serverIdParam);
+    setPath('.');
+  }, [serverIdParam]);
+
   return (
     <>
       <div className="page-title">
@@ -57,6 +63,7 @@ export default function FileManagerPage() {
               className={`server-list-item ${activeServerId === server.id ? 'active' : ''}`}
               onClick={() => {
                 setServerId(server.id);
+                setSearch({ serverId: server.id });
                 setPath('.');
               }}
             >
@@ -65,60 +72,68 @@ export default function FileManagerPage() {
           ))}
         </aside>
         <main className="main-panel">
-          <PathBreadcrumb path={currentPath} onChange={setPath} />
-          <div className="toolbar" style={{ padding: 12 }}>
-            <Typography.Text strong>{selectedName}</Typography.Text>
-            <Button onClick={() => setPath(parentPath(currentPath))}>上级</Button>
-            <Button icon={<RefreshCw size={16} />} onClick={refresh} />
-            <Button
-              icon={<FolderPlus size={16} />}
-              onClick={() => {
-                Modal.confirm({
-                  title: '新建文件夹',
-                  content: <Input id="mkdir-name" placeholder="folder-name" />,
-                  onOk: async () => {
-                    const input = document.getElementById('mkdir-name') as HTMLInputElement | null;
-                    if (input?.value) {
-                      await mutate.mutateAsync(() => mkdir(activeServerId, `${currentPath}/${input.value}`));
-                    }
-                  },
-                });
-              }}
-            />
-            <Upload
-              showUploadList={false}
-              beforeUpload={async (file) => {
-                await mutate.mutateAsync(() => uploadFile(activeServerId, currentPath, file));
-                return false;
-              }}
-            >
-              <Button icon={<UploadCloud size={16} />}>上传</Button>
-            </Upload>
-          </div>
-          <FileTable
-            files={files.data?.items ?? []}
-            loading={files.isLoading}
-            onEnter={(file) => file.type === 'directory' && setPath(file.path)}
-            onDelete={(file) => mutate.mutate(() => deleteFile(activeServerId, file.path))}
-            onRename={(file) => {
-              Modal.confirm({
-                title: '重命名',
-                content: <Input id="rename-name" defaultValue={file.name} />,
-                onOk: async () => {
-                  const input = document.getElementById('rename-name') as HTMLInputElement | null;
-                  if (input?.value) {
-                    const next = `${parentPath(file.path)}/${input.value}`;
-                    await mutate.mutateAsync(() => rename(activeServerId, file.path, next));
-                  }
-                },
-              });
-            }}
-            onDownload={(file) => {
-              void downloadFile(activeServerId, file.path).catch((error) =>
-                message.error(error instanceof Error ? error.message : '下载失败'),
-              );
-            }}
-          />
+          {activeServerId ? (
+            <>
+              <PathBreadcrumb path={currentPath} onChange={setPath} />
+              <div className="toolbar" style={{ padding: 12 }}>
+                <Typography.Text strong>{selectedName}</Typography.Text>
+                <Button onClick={() => setPath(parentPath(currentPath))}>上级</Button>
+                <Button icon={<RefreshCw size={16} />} onClick={refresh} />
+                <Button
+                  icon={<FolderPlus size={16} />}
+                  onClick={() => {
+                    Modal.confirm({
+                      title: '新建文件夹',
+                      content: <Input id="mkdir-name" placeholder="folder-name" />,
+                      onOk: async () => {
+                        const input = document.getElementById('mkdir-name') as HTMLInputElement | null;
+                        if (input?.value) {
+                          await mutate.mutateAsync(() =>
+                            mkdir(activeServerId, `${currentPath}/${input.value}`),
+                          );
+                        }
+                      },
+                    });
+                  }}
+                />
+                <Upload
+                  showUploadList={false}
+                  beforeUpload={async (file) => {
+                    await mutate.mutateAsync(() => uploadFile(activeServerId, currentPath, file));
+                    return false;
+                  }}
+                >
+                  <Button icon={<UploadCloud size={16} />}>上传</Button>
+                </Upload>
+              </div>
+              <FileTable
+                files={files.data?.items ?? []}
+                loading={files.isLoading}
+                onEnter={(file) => file.type === 'directory' && setPath(file.path)}
+                onDelete={(file) => mutate.mutate(() => deleteFile(activeServerId, file.path))}
+                onRename={(file) => {
+                  Modal.confirm({
+                    title: '重命名',
+                    content: <Input id="rename-name" defaultValue={file.name} />,
+                    onOk: async () => {
+                      const input = document.getElementById('rename-name') as HTMLInputElement | null;
+                      if (input?.value) {
+                        const next = `${parentPath(file.path)}/${input.value}`;
+                        await mutate.mutateAsync(() => rename(activeServerId, file.path, next));
+                      }
+                    },
+                  });
+                }}
+                onDownload={(file) => {
+                  void downloadFile(activeServerId, file.path).catch((error) =>
+                    message.error(error instanceof Error ? error.message : '下载失败'),
+                  );
+                }}
+              />
+            </>
+          ) : (
+            <div className="terminal-empty">选择一台服务器进入文件管理</div>
+          )}
         </main>
       </div>
     </>
