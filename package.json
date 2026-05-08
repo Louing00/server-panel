@@ -1,0 +1,18 @@
+{
+  "name": "server-panel",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@9.15.4",
+  "scripts": {
+    "dev": "corepack pnpm --parallel --filter @server-panel/server --filter @server-panel/web dev",
+    "build": "corepack pnpm --filter @server-panel/server build && corepack pnpm --filter @server-panel/web build",
+    "lint": "corepack pnpm --recursive lint",
+    "format": "prettier --write .",
+    "prisma:generate": "corepack pnpm --filter @server-panel/server prisma generate",
+    "prisma:migrate": "corepack pnpm --filter @server-panel/server prisma migrate dev",
+    "seed": "corepack pnpm --filter @server-panel/server seed"
+  },
+  "devDependencies": {
+    "prettier": "^3.3.3"
+  }
+}

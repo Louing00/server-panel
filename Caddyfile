@@ -1,0 +1,6 @@
+:80 {
+  reverse_proxy app:3000
+  request_body {
+    max_size 200MB
+  }
+}

@@ -1,0 +1,144 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  admin
+  operator
+  readonly
+  auditor
+}
+
+enum UserStatus {
+  active
+  disabled
+}
+
+enum AuthType {
+  password
+  privateKey
+  privateKeyWithPassphrase
+}
+
+enum ServerStatus {
+  unknown
+  online
+  offline
+}
+
+model User {
+  id           String         @id @default(uuid()) @db.Uuid
+  username     String         @unique @db.VarChar(64)
+  passwordHash String         @map("password_hash")
+  role         UserRole       @default(operator)
+  status       UserStatus     @default(active)
+  createdAt    DateTime       @default(now()) @map("created_at")
+  updatedAt    DateTime       @updatedAt @map("updated_at")
+  lastLoginAt  DateTime?      @map("last_login_at")
+  refreshTokens RefreshToken[]
+  auditLogs    AuditLog[]
+  servers      Server[]       @relation("ServerCreator")
+  sshSessions  SshSession[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  tokenHash String    @unique @map("token_hash")
+  userId    String    @map("user_id") @db.Uuid
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime  @map("expires_at")
+  revokedAt DateTime? @map("revoked_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@map("refresh_tokens")
+}
+
+model ServerGroup {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String   @db.VarChar(128)
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  servers     Server[]
+
+  @@map("server_groups")
+}
+
+model Credential {
+  id               String   @id @default(uuid()) @db.Uuid
+  type             AuthType
+  encryptedPayload String   @map("encrypted_payload")
+  keyVersion       Int      @default(1) @map("key_version")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+  servers          Server[]
+
+  @@map("credentials")
+}
+
+model Server {
+  id                String       @id @default(uuid()) @db.Uuid
+  groupId           String?      @map("group_id") @db.Uuid
+  group             ServerGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  name              String       @db.VarChar(128)
+  host              String       @db.VarChar(255)
+  port              Int          @default(22)
+  username          String       @db.VarChar(128)
+  authType          AuthType     @map("auth_type")
+  credentialId      String?      @map("credential_id") @db.Uuid
+  credential        Credential?  @relation(fields: [credentialId], references: [id], onDelete: SetNull)
+  tags              String[]     @default([])
+  description       String?
+  status            ServerStatus @default(unknown)
+  lastSuccessAt     DateTime?    @map("last_success_at")
+  lastFailureAt     DateTime?    @map("last_failure_at")
+  lastFailureReason String?      @map("last_failure_reason")
+  createdBy         String?      @map("created_by") @db.Uuid
+  creator           User?        @relation("ServerCreator", fields: [createdBy], references: [id], onDelete: SetNull)
+  createdAt         DateTime     @default(now()) @map("created_at")
+  updatedAt         DateTime     @updatedAt @map("updated_at")
+  auditLogs         AuditLog[]
+  sshSessions       SshSession[]
+
+  @@index([host])
+  @@map("servers")
+}
+
+model AuditLog {
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String?  @map("user_id") @db.Uuid
+  user         User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action       String   @db.VarChar(128)
+  resourceType String?  @map("resource_type") @db.VarChar(64)
+  resourceId   String?  @map("resource_id") @db.Uuid
+  server       Server?  @relation(fields: [resourceId], references: [id], onDelete: SetNull)
+  ip           String?  @db.VarChar(64)
+  userAgent    String?  @map("user_agent")
+  detail       Json?
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model SshSession {
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  serverId    String    @map("server_id") @db.Uuid
+  server      Server    @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  status      String    @db.VarChar(32)
+  startedAt   DateTime  @default(now()) @map("started_at")
+  endedAt     DateTime? @map("ended_at")
+  closeReason String?   @map("close_reason")
+
+  @@map("ssh_sessions")
+}

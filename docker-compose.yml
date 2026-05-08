@@ -1,0 +1,43 @@
+services:
+  app:
+    build: .
+    container_name: server-panel-app
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-panel}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-panel}
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_ACCESS_EXPIRES_IN: ${JWT_ACCESS_EXPIRES_IN:-15m}
+      JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
+      APP_MASTER_KEY: ${APP_MASTER_KEY}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      SSH_CONNECT_TIMEOUT_MS: ${SSH_CONNECT_TIMEOUT_MS:-10000}
+      SSH_IDLE_TIMEOUT_MS: ${SSH_IDLE_TIMEOUT_MS:-1800000}
+      MAX_UPLOAD_SIZE_MB: ${MAX_UPLOAD_SIZE_MB:-200}
+    depends_on:
+      - postgres
+      - redis
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16
+    container_name: server-panel-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-panel}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-panel}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  redis:
+    image: redis:7
+    container_name: server-panel-redis
+    restart: unless-stopped
+
+volumes:
+  postgres_data:

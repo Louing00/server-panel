@@ -1,0 +1,191 @@
+import type { FastifyInstance } from 'fastify';
+import { z } from 'zod';
+import { writeAudit } from '../audit/audit.service.js';
+import { authenticate, requireAdmin } from '../common/auth.js';
+import { HttpError } from '../common/errors.js';
+import { prisma } from '../common/prisma.js';
+import { createCredential, decryptCredential, updateCredential } from '../credentials/credentials.service.js';
+import { testSshConnection } from '../ssh/ssh.service.js';
+
+const credentialSchema = z
+  .object({
+    password: z.string().optional(),
+    privateKey: z.string().optional(),
+    passphrase: z.string().optional(),
+  })
+  .optional();
+
+const serverSchema = z.object({
+  name: z.string().min(1).max(128),
+  host: z.string().min(1).max(255),
+  port: z.coerce.number().int().min(1).max(65535).default(22),
+  username: z.string().min(1).max(128),
+  authType: z.enum(['password', 'privateKey', 'privateKeyWithPassphrase']),
+  credential: credentialSchema,
+  tags: z.array(z.string().min(1).max(32)).default([]),
+  groupId: z.string().uuid().nullable().optional(),
+  description: z.string().nullable().optional(),
+});
+
+const listSchema = z.object({
+  keyword: z.string().optional(),
+  groupId: z.string().uuid().optional(),
+  tag: z.string().optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(20),
+});
+
+function publicServer<T extends { credentialId?: string | null; credential?: unknown }>(server: T) {
+  const { credential, ...rest } = server;
+  return { ...rest, hasCredential: Boolean(rest.credentialId) };
+}
+
+export async function serverRoutes(app: FastifyInstance) {
+  app.get('/servers', { preHandler: authenticate }, async (request) => {
+    const query = listSchema.parse(request.query);
+    const where = {
+      ...(query.keyword
+        ? {
+            OR: [
+              { name: { contains: query.keyword, mode: 'insensitive' as const } },
+              { host: { contains: query.keyword, mode: 'insensitive' as const } },
+              { username: { contains: query.keyword, mode: 'insensitive' as const } },
+            ],
+          }
+        : {}),
+      ...(query.groupId ? { groupId: query.groupId } : {}),
+      ...(query.tag ? { tags: { has: query.tag } } : {}),
+    };
+    const [items, total] = await Promise.all([
+      prisma.server.findMany({
+        where,
+        orderBy: { updatedAt: 'desc' },
+        skip: (query.page - 1) * query.pageSize,
+        take: query.pageSize,
+        include: { group: true },
+      }),
+      prisma.server.count({ where }),
+    ]);
+    return { items: items.map(publicServer), total, page: query.page, pageSize: query.pageSize };
+  });
+
+  app.post('/servers', { preHandler: [authenticate, requireAdmin] }, async (request, reply) => {
+    const body = serverSchema.parse(request.body);
+    const credential = body.credential ? await createCredential(body.authType, body.credential) : null;
+    const server = await prisma.server.create({
+      data: {
+        name: body.name,
+        host: body.host,
+        port: body.port,
+        username: body.username,
+        authType: body.authType,
+        credentialId: credential?.id,
+        tags: body.tags,
+        groupId: body.groupId ?? undefined,
+        description: body.description ?? undefined,
+        createdBy: request.authUser?.id,
+      },
+    });
+    await writeAudit({
+      action: 'server.create',
+      resourceType: 'server',
+      resourceId: server.id,
+      request,
+      detail: body,
+    });
+    return reply.status(201).send(publicServer(server));
+  });
+
+  app.put('/servers/:id', { preHandler: [authenticate, requireAdmin] }, async (request) => {
+    const params = z.object({ id: z.string().uuid() }).parse(request.params);
+    const body = serverSchema.partial().parse(request.body);
+    const current = await prisma.server.findUnique({
+      where: { id: params.id },
+      include: { credential: true },
+    });
+    if (!current) throw new HttpError(404, '服务器不存在');
+
+    let credentialId = current.credentialId;
+    if (body.credential) {
+      if (current.credential) {
+        await updateCredential(current.credential, body.credential);
+      } else {
+        const created = await createCredential(body.authType ?? current.authType, body.credential);
+        credentialId = created.id;
+      }
+    }
+
+    const server = await prisma.server.update({
+      where: { id: params.id },
+      data: {
+        name: body.name,
+        host: body.host,
+        port: body.port,
+        username: body.username,
+        authType: body.authType,
+        credentialId,
+        tags: body.tags,
+        groupId: body.groupId === null ? null : body.groupId,
+        description: body.description,
+      },
+    });
+    await writeAudit({
+      action: 'server.update',
+      resourceType: 'server',
+      resourceId: server.id,
+      request,
+      detail: body,
+    });
+    return publicServer(server);
+  });
+
+  app.delete('/servers/:id', { preHandler: [authenticate, requireAdmin] }, async (request) => {
+    const params = z.object({ id: z.string().uuid() }).parse(request.params);
+    await prisma.server.delete({ where: { id: params.id } });
+    await writeAudit({
+      action: 'server.delete',
+      resourceType: 'server',
+      resourceId: params.id,
+      request,
+    });
+    return { success: true };
+  });
+
+  app.post('/servers/:id/test', { preHandler: authenticate }, async (request, reply) => {
+    const params = z.object({ id: z.string().uuid() }).parse(request.params);
+    const server = await prisma.server.findUnique({
+      where: { id: params.id },
+      include: { credential: true },
+    });
+    if (!server) throw new HttpError(404, '服务器不存在');
+    try {
+      const result = await testSshConnection(server, decryptCredential(server.credential));
+      await prisma.server.update({
+        where: { id: server.id },
+        data: { status: 'online', lastSuccessAt: new Date(), lastFailureReason: null },
+      });
+      await writeAudit({
+        action: 'server.test_success',
+        resourceType: 'server',
+        resourceId: server.id,
+        request,
+        detail: result,
+      });
+      return result;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '连接失败';
+      await prisma.server.update({
+        where: { id: server.id },
+        data: { status: 'offline', lastFailureAt: new Date(), lastFailureReason: message },
+      });
+      await writeAudit({
+        action: 'server.test_failed',
+        resourceType: 'server',
+        resourceId: server.id,
+        request,
+        detail: { message },
+      });
+      return reply.status(400).send({ success: false, message });
+    }
+  });
+}
