@@ -82,6 +82,24 @@ http://<服务器IP>:3000
 grep 'ADMIN_' .env
 ```
 
+## Nginx 反向代理
+
+如果要通过域名访问，先确保域名 A 记录解析到服务器 IP，然后在服务器项目目录执行：
+
+```bash
+sudo DOMAIN=panel.example.com bash scripts/setup-nginx.sh
+```
+
+把 `panel.example.com` 换成你的域名。脚本会安装 Nginx，反向代理到本机 `127.0.0.1:3000`，并配置 WebSocket 转发，保证 Web SSH 可用。
+
+需要自动申请 HTTPS 证书时执行：
+
+```bash
+sudo ENABLE_CERTBOT=1 DOMAIN=panel.example.com bash scripts/setup-nginx.sh
+```
+
+手动配置可参考 [deploy/nginx/server-panel.conf](deploy/nginx/server-panel.conf)。
+
 如果服务器已经安装好 Docker，也可以手动执行：
 
 ```bash
