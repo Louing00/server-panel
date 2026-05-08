@@ -1,5 +1,6 @@
 FROM node:22-alpine AS base
 WORKDIR /app
+RUN apk add --no-cache openssl
 RUN corepack enable
 
 FROM base AS deps
@@ -20,4 +21,4 @@ COPY --from=build /app/node_modules node_modules
 COPY --from=build /app/apps/server apps/server
 COPY --from=build /app/apps/web/dist apps/web/dist
 EXPOSE 3000
-CMD ["sh", "-c", "corepack pnpm --filter @server-panel/server prisma migrate deploy && corepack pnpm --filter @server-panel/server start"]
+CMD ["corepack", "pnpm", "--filter", "@server-panel/server", "start"]

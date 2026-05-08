@@ -122,6 +122,14 @@ main() {
     sleep 2
   done
 
+  log "等待应用容器就绪"
+  for _ in $(seq 1 60); do
+    if compose exec -T app node --version >/dev/null 2>&1; then
+      break
+    fi
+    sleep 2
+  done
+
   log "执行数据库迁移"
   compose exec -T app corepack pnpm --filter @server-panel/server prisma migrate deploy
 
