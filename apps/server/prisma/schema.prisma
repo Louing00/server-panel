@@ -97,6 +97,7 @@ model Server {
   tags              String[]     @default([])
   description       String?
   status            ServerStatus @default(unknown)
+  latencyMs         Int?         @map("latency_ms")
   lastSuccessAt     DateTime?    @map("last_success_at")
   lastFailureAt     DateTime?    @map("last_failure_at")
   lastFailureReason String?      @map("last_failure_reason")

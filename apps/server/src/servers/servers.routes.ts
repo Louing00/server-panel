@@ -147,7 +147,12 @@ async function testAndUpdateServer(serverId: string, request?: Parameters<typeof
     const result = await testSshConnection(server, decryptCredential(server.credential));
     const updated = await prisma.server.update({
       where: { id: server.id },
-      data: { status: 'online', lastSuccessAt: new Date(), lastFailureReason: null },
+      data: {
+        status: 'online',
+        latencyMs: result.latencyMs,
+        lastSuccessAt: new Date(),
+        lastFailureReason: null,
+      },
     });
     await writeAudit({
       action: 'server.test_success',
@@ -161,7 +166,12 @@ async function testAndUpdateServer(serverId: string, request?: Parameters<typeof
     const message = error instanceof Error ? error.message : '连接失败';
     const updated = await prisma.server.update({
       where: { id: server.id },
-      data: { status: 'offline', lastFailureAt: new Date(), lastFailureReason: message },
+      data: {
+        status: 'offline',
+        latencyMs: null,
+        lastFailureAt: new Date(),
+        lastFailureReason: message,
+      },
     });
     await writeAudit({
       action: 'server.test_failed',

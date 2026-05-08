@@ -9,6 +9,7 @@ export type Server = {
   groupId?: string | null;
   description?: string | null;
   status: 'unknown' | 'online' | 'offline';
+  latencyMs?: number | null;
   lastSuccessAt?: string | null;
   lastFailureAt?: string | null;
   lastFailureReason?: string | null;

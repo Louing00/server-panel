@@ -310,6 +310,12 @@ export default function ServersPage() {
             ),
           },
           {
+            title: '延迟',
+            dataIndex: 'latencyMs',
+            render: (value: number | null | undefined) =>
+              typeof value === 'number' ? <Tag color={value < 300 ? 'green' : value < 800 ? 'gold' : 'red'}>{value} ms</Tag> : '-',
+          },
+          {
             title: '操作',
             render: (_, row) => (
               <Space>

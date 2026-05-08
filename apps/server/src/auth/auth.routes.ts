@@ -3,7 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { authenticate, requireAdmin } from '../common/auth.js';
 import { prisma } from '../common/prisma.js';
-import { login, logout, refresh } from './auth.service.js';
+import { changePassword, login, logout, refresh } from './auth.service.js';
 
 const loginSchema = z.object({
   username: z.string().min(1).max(64),
@@ -11,6 +11,17 @@ const loginSchema = z.object({
 });
 
 const refreshSchema = z.object({ refreshToken: z.string().min(20) });
+
+const changePasswordSchema = z
+  .object({
+    currentPassword: z.string().min(1),
+    newPassword: z.string().min(8, '新密码至少 8 位'),
+    confirmPassword: z.string().min(8),
+  })
+  .refine((value) => value.newPassword === value.confirmPassword, {
+    path: ['confirmPassword'],
+    message: '两次输入的新密码不一致',
+  });
 
 const createUserSchema = z.object({
   username: z.string().min(2).max(64),
@@ -36,6 +47,12 @@ export async function authRoutes(app: FastifyInstance) {
   });
 
   app.get('/auth/me', { preHandler: authenticate }, async (request) => ({ user: request.authUser }));
+
+  app.post('/auth/change-password', { preHandler: authenticate }, async (request) => {
+    const body = changePasswordSchema.parse(request.body);
+    await changePassword(request, request.authUser!.id, body.currentPassword, body.newPassword);
+    return { success: true };
+  });
 
   app.get('/users', { preHandler: [authenticate, requireAdmin] }, async () => {
     return prisma.user.findMany({

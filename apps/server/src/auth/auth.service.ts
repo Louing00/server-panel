@@ -73,3 +73,34 @@ export async function logout(token: string) {
     data: { revokedAt: new Date() },
   });
 }
+
+export async function changePassword(
+  request: FastifyRequest,
+  userId: string,
+  currentPassword: string,
+  newPassword: string,
+) {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user || user.status !== 'active') throw new HttpError(404, '用户不存在或已禁用');
+  const matched = await bcrypt.compare(currentPassword, user.passwordHash);
+  if (!matched) {
+    await writeAudit({
+      action: 'auth.password_change_failed',
+      request,
+      userId,
+      detail: { reason: 'invalid_current_password' },
+    });
+    throw new HttpError(400, '当前密码不正确');
+  }
+  await prisma.$transaction([
+    prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash: await bcrypt.hash(newPassword, 12) },
+    }),
+    prisma.refreshToken.updateMany({
+      where: { userId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    }),
+  ]);
+  await writeAudit({ action: 'auth.password_changed', request, userId });
+}

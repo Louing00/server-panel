@@ -7,3 +7,14 @@ export function loginApi(payload: { username: string; password: string }) {
     user: { id: string; username: string; role: string };
   }>('/auth/login', { method: 'POST', body: JSON.stringify(payload) });
 }
+
+export function changePasswordApi(payload: {
+  currentPassword: string;
+  newPassword: string;
+  confirmPassword: string;
+}) {
+  return request<{ success: true }>('/auth/change-password', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
