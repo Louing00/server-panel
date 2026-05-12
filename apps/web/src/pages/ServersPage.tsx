@@ -290,6 +290,7 @@ export default function ServersPage() {
         rowKey="id"
         loading={servers.isLoading}
         dataSource={servers.data?.items ?? []}
+        scroll={{ x: 1080 }}
         columns={[
           { title: '名称', dataIndex: 'name', render: (value, row) => <Button type="link" onClick={() => setEditing(row)}>{value}</Button> },
           { title: '主机', render: (_, row) => `${row.host}:${row.port}` },

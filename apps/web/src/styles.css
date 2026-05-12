@@ -190,29 +190,107 @@ body {
 
 @media (max-width: 900px) {
   .app-shell {
-    display: block;
+    display: flex;
+    flex-direction: column;
   }
 
   .sidebar {
+    flex: 0 0 auto !important;
     width: 100% !important;
     max-width: none !important;
     min-width: 0 !important;
+    border-right: 0;
+    border-bottom: 1px solid #dfe5dc;
+  }
+
+  .sidebar .ant-layout-sider-children {
+    display: block;
+    height: auto;
+  }
+
+  .brand {
+    min-height: auto;
+    padding: 14px 18px 8px;
   }
 
   .nav-list {
+    padding: 8px 18px 14px;
     grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .nav-item {
+    justify-content: center;
+    min-height: 44px;
+    padding: 10px 8px;
+    white-space: nowrap;
+  }
+
+  .app-shell > .ant-layout {
+    width: 100%;
+    min-width: 0;
   }
 
   .topbar {
+    justify-content: flex-end;
+    height: 48px;
     padding: 0 14px;
+  }
+
+  .user-actions .ant-typography {
+    display: none;
   }
 
   .content {
     padding: 14px;
+    overflow-x: hidden;
+  }
+
+  .page-title {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .page-title .ant-btn {
+    width: auto;
   }
 
   .metric-grid,
   .split-panel {
     grid-template-columns: 1fr;
+  }
+
+  .side-panel,
+  .main-panel {
+    min-width: 0;
+  }
+}
+
+@media (max-width: 560px) {
+  .brand {
+    gap: 10px;
+  }
+
+  .brand-mark {
+    width: 34px;
+    height: 34px;
+  }
+
+  .brand .ant-typography:first-child {
+    font-size: 16px;
+  }
+
+  .nav-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .toolbar .ant-input-search,
+  .toolbar .ant-btn {
+    width: 100% !important;
   }
 }
